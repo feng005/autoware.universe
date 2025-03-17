@@ -17,16 +17,21 @@
 #include "autoware/behavior_path_planner_common/utils/drivable_area_expansion/static_drivable_area.hpp"
 #include "autoware/behavior_path_planner_common/utils/path_utils.hpp"
 #include "autoware/behavior_path_planner_common/utils/utils.hpp"
-#include "autoware/universe_utils/ros/debug_publisher.hpp"
-#include "autoware/universe_utils/system/stop_watch.hpp"
+#include "autoware_utils/ros/debug_publisher.hpp"
+#include "autoware_utils/system/stop_watch.hpp"
 
 #include <autoware_lanelet2_extension/utility/query.hpp>
 #include <magic_enum.hpp>
 
 #include <boost/scope_exit.hpp>
 
+#include <algorithm>
+#include <iostream>
 #include <memory>
 #include <string>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 
 namespace autoware::behavior_path_planner
 {
@@ -135,7 +140,7 @@ BehaviorModuleOutput PlannerManager::run(const std::shared_ptr<PlannerData> & da
   const bool is_any_module_running =
     is_any_approved_module_running || is_any_candidate_module_running_or_idle;
 
-  updateCurrentRouteLanelet(data);
+  updateCurrentRouteLanelet(data, is_any_approved_module_running);
 
   const bool is_out_of_route = utils::isEgoOutOfRoute(
     data->self_odometry->pose.pose, current_route_lanelet_->value(), data->prev_modified_goal,
@@ -149,8 +154,6 @@ BehaviorModuleOutput PlannerManager::run(const std::shared_ptr<PlannerData> & da
     generateCombinedDrivableArea(result_output, data);
     return result_output;
   }
-  std::vector<SceneModulePtr>
-    deleted_modules;  // store the scene modules deleted from approved modules
 
   SlotOutput result_output = SlotOutput{
     getReferencePath(data),
@@ -179,6 +182,7 @@ BehaviorModuleOutput PlannerManager::run(const std::shared_ptr<PlannerData> & da
   std::for_each(manager_ptrs_.begin(), manager_ptrs_.end(), [](const auto & m) {
     m->updateObserver();
     m->publishRTCStatus();
+    m->publish_planning_factors();
   });
 
   generateCombinedDrivableArea(result_output.valid_output, data);
@@ -228,7 +232,8 @@ void PlannerManager::generateCombinedDrivableArea(
   utils::extractObstaclesFromDrivableArea(output.path, di.obstacles);
 }
 
-void PlannerManager::updateCurrentRouteLanelet(const std::shared_ptr<PlannerData> & data)
+void PlannerManager::updateCurrentRouteLanelet(
+  const std::shared_ptr<PlannerData> & data, const bool is_any_approved_module_running)
 {
   const auto & route_handler = data->route_handler;
   const auto & pose = data->self_odometry->pose.pose;
@@ -256,10 +261,11 @@ void PlannerManager::updateCurrentRouteLanelet(const std::shared_ptr<PlannerData
       p.ego_nearest_yaw_threshold) ||
     lanelet::utils::query::getClosestLanelet(lanelet_sequence, pose, &closest_lane);
 
-  if (could_calculate_closest_lanelet)
+  if (could_calculate_closest_lanelet) {
     *current_route_lanelet_ = closest_lane;
-  else
+  } else if (!is_any_approved_module_running) {
     resetCurrentRouteLanelet(data);
+  }
 }
 
 BehaviorModuleOutput PlannerManager::getReferencePath(
@@ -275,10 +281,10 @@ void PlannerManager::publishDebugRootReferencePath(
 {
   using visualization_msgs::msg::Marker;
   MarkerArray array;
-  Marker m = autoware::universe_utils::createDefaultMarker(
+  Marker m = autoware_utils::create_default_marker(
     "map", clock_.now(), "root_reference_path", 0UL, Marker::LINE_STRIP,
-    autoware::universe_utils::createMarkerScale(1.0, 1.0, 1.0),
-    autoware::universe_utils::createMarkerColor(1.0, 0.0, 0.0, 1.0));
+    autoware_utils::create_marker_scale(1.0, 1.0, 1.0),
+    autoware_utils::create_marker_color(1.0, 0.0, 0.0, 1.0));
   for (const auto & p : reference_path.path.points) m.points.push_back(p.point.pose.position);
   array.markers.push_back(m);
   m.points.clear();
@@ -749,8 +755,6 @@ BehaviorModuleOutput SubPlannerManager::run(
   module_ptr->postProcess();
 
   module_ptr->updateCurrentState();
-
-  module_ptr->publishSteeringFactor();
 
   module_ptr->publishObjectsOfInterestMarker();
 

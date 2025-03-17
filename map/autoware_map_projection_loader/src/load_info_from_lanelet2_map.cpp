@@ -14,24 +14,30 @@
 
 #include "autoware/map_projection_loader/load_info_from_lanelet2_map.hpp"
 
-#include "tier4_map_msgs/msg/map_projector_info.hpp"
+#include "autoware_map_msgs/msg/map_projector_info.hpp"
 
 #include <lanelet2_core/LaneletMap.h>
 #include <lanelet2_core/geometry/LineString.h>
 #include <lanelet2_io/Io.h>
 #include <lanelet2_projection/UTM.h>
 
+#include <sstream>
 #include <string>
 
 namespace autoware::map_projection_loader
 {
-tier4_map_msgs::msg::MapProjectorInfo load_info_from_lanelet2_map(const std::string & filename)
+autoware_map_msgs::msg::MapProjectorInfo load_info_from_lanelet2_map(const std::string & filename)
 {
   lanelet::ErrorMessages errors{};
   lanelet::projection::MGRSProjector projector{};
   const lanelet::LaneletMapPtr map = lanelet::load(filename, projector, &errors);
   if (!errors.empty()) {
-    throw std::runtime_error("Error occurred while loading lanelet2 map");
+    std::stringstream ss;
+    ss << "Error occurred while loading lanelet2 map:\n";
+    for (const auto & err : errors) {
+      ss << "- " << err << "\n";
+    }
+    throw std::runtime_error(ss.str());
   }
 
   // If the lat & lon values in all the points of lanelet2 map are all zeros,
@@ -46,18 +52,18 @@ tier4_map_msgs::msg::MapProjectorInfo load_info_from_lanelet2_map(const std::str
     }
   }
 
-  tier4_map_msgs::msg::MapProjectorInfo msg;
+  autoware_map_msgs::msg::MapProjectorInfo msg;
   if (is_local) {
-    msg.projector_type = tier4_map_msgs::msg::MapProjectorInfo::LOCAL;
+    msg.projector_type = autoware_map_msgs::msg::MapProjectorInfo::LOCAL;
   } else {
-    msg.projector_type = tier4_map_msgs::msg::MapProjectorInfo::MGRS;
+    msg.projector_type = autoware_map_msgs::msg::MapProjectorInfo::MGRS;
     msg.mgrs_grid = projector.getProjectedMGRSGrid();
   }
 
   // We assume that the vertical datum of the map is WGS84 when using lanelet2 map.
   // However, do note that this is not always true, and may cause problems in the future.
   // Thus, please consider using the map_projector_info.yaml instead of this deprecated function.
-  msg.vertical_datum = tier4_map_msgs::msg::MapProjectorInfo::WGS84;
+  msg.vertical_datum = autoware_map_msgs::msg::MapProjectorInfo::WGS84;
   return msg;
 }
 }  // namespace autoware::map_projection_loader

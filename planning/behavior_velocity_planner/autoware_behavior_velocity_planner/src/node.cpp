@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "node.hpp"
+#include "autoware/behavior_velocity_planner/node.hpp"
 
 #include <autoware/behavior_velocity_planner_common/utilization/path_utilization.hpp>
 #include <autoware/motion_utils/trajectory/path_with_lane_id.hpp>
 #include <autoware/motion_utils/trajectory/trajectory.hpp>
-#include <autoware/universe_utils/ros/wait_for_param.hpp>
-#include <autoware/universe_utils/transform/transforms.hpp>
 #include <autoware/velocity_smoother/smoother/analytical_jerk_constrained_smoother/analytical_jerk_constrained_smoother.hpp>
 #include <autoware_lanelet2_extension/utility/message_conversion.hpp>
+#include <autoware_utils/ros/wait_for_param.hpp>
+#include <autoware_utils/transform/transforms.hpp>
 
 #include <diagnostic_msgs/msg/diagnostic_status.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
@@ -28,6 +28,8 @@
 #include <lanelet2_routing/Route.h>
 #include <pcl/common/transforms.h>
 #include <pcl_conversions/pcl_conversions.h>
+
+#include <string>
 #ifdef ROS_DISTRO_GALACTIC
 #include <tf2_eigen/tf2_eigen.h>
 #else
@@ -38,27 +40,13 @@
 #include <memory>
 #include <vector>
 
-namespace
-{
-rclcpp::SubscriptionOptions createSubscriptionOptions(rclcpp::Node * node_ptr)
-{
-  rclcpp::CallbackGroup::SharedPtr callback_group =
-    node_ptr->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
-
-  auto sub_opt = rclcpp::SubscriptionOptions();
-  sub_opt.callback_group = callback_group;
-
-  return sub_opt;
-}
-}  // namespace
-
 namespace autoware::behavior_velocity_planner
 {
 namespace
 {
 
 autoware_planning_msgs::msg::Path to_path(
-  const tier4_planning_msgs::msg::PathWithLaneId & path_with_id)
+  const autoware_internal_planning_msgs::msg::PathWithLaneId & path_with_id)
 {
   autoware_planning_msgs::msg::Path path;
   for (const auto & path_point : path_with_id.points) {
@@ -79,22 +67,12 @@ BehaviorVelocityPlannerNode::BehaviorVelocityPlannerNode(const rclcpp::NodeOptio
 
   // Trigger Subscriber
   trigger_sub_path_with_lane_id_ =
-    this->create_subscription<tier4_planning_msgs::msg::PathWithLaneId>(
-      "~/input/path_with_lane_id", 1, std::bind(&BehaviorVelocityPlannerNode::onTrigger, this, _1),
-      createSubscriptionOptions(this));
+    this->create_subscription<autoware_internal_planning_msgs::msg::PathWithLaneId>(
+      "~/input/path_with_lane_id", 1, std::bind(&BehaviorVelocityPlannerNode::onTrigger, this, _1));
 
-  // Subscribers
-  sub_lanelet_map_ = this->create_subscription<autoware_map_msgs::msg::LaneletMapBin>(
-    "~/input/vector_map", rclcpp::QoS(10).transient_local(),
-    std::bind(&BehaviorVelocityPlannerNode::onLaneletMap, this, _1),
-    createSubscriptionOptions(this));
-  sub_external_velocity_limit_ = this->create_subscription<VelocityLimit>(
-    "~/input/external_velocity_limit_mps", rclcpp::QoS{1}.transient_local(),
-    std::bind(&BehaviorVelocityPlannerNode::onExternalVelocityLimit, this, _1));
-
-  srv_load_plugin_ = create_service<LoadPlugin>(
+  srv_load_plugin_ = create_service<autoware_internal_debug_msgs::srv::String>(
     "~/service/load_plugin", std::bind(&BehaviorVelocityPlannerNode::onLoadPlugin, this, _1, _2));
-  srv_unload_plugin_ = create_service<UnloadPlugin>(
+  srv_unload_plugin_ = create_service<autoware_internal_debug_msgs::srv::String>(
     "~/service/unload_plugin",
     std::bind(&BehaviorVelocityPlannerNode::onUnloadPlugin, this, _1, _2));
 
@@ -103,8 +81,6 @@ BehaviorVelocityPlannerNode::BehaviorVelocityPlannerNode(const rclcpp::NodeOptio
 
   // Publishers
   path_pub_ = this->create_publisher<autoware_planning_msgs::msg::Path>("~/output/path", 1);
-  stop_reason_diag_pub_ =
-    this->create_publisher<diagnostic_msgs::msg::DiagnosticStatus>("~/output/stop_reason", 1);
   debug_viz_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("~/debug/path", 1);
 
   // Parameters
@@ -130,25 +106,24 @@ BehaviorVelocityPlannerNode::BehaviorVelocityPlannerNode(const rclcpp::NodeOptio
     planner_manager_.launchScenePlugin(*this, name);
   }
 
-  logger_configure_ = std::make_unique<autoware::universe_utils::LoggerLevelConfigure>(this);
-  published_time_publisher_ =
-    std::make_unique<autoware::universe_utils::PublishedTimePublisher>(this);
+  logger_configure_ = std::make_unique<autoware_utils::LoggerLevelConfigure>(this);
+  published_time_publisher_ = std::make_unique<autoware_utils::PublishedTimePublisher>(this);
 }
 
 void BehaviorVelocityPlannerNode::onLoadPlugin(
-  const LoadPlugin::Request::SharedPtr request,
-  [[maybe_unused]] const LoadPlugin::Response::SharedPtr response)
+  const autoware_internal_debug_msgs::srv::String::Request::SharedPtr request,
+  [[maybe_unused]] const autoware_internal_debug_msgs::srv::String::Response::SharedPtr response)
 {
   std::unique_lock<std::mutex> lk(mutex_);
-  planner_manager_.launchScenePlugin(*this, request->plugin_name);
+  planner_manager_.launchScenePlugin(*this, request->data);
 }
 
 void BehaviorVelocityPlannerNode::onUnloadPlugin(
-  const UnloadPlugin::Request::SharedPtr request,
-  [[maybe_unused]] const UnloadPlugin::Response::SharedPtr response)
+  const autoware_internal_debug_msgs::srv::String::Request::SharedPtr request,
+  [[maybe_unused]] const autoware_internal_debug_msgs::srv::String::Response::SharedPtr response)
 {
   std::unique_lock<std::mutex> lk(mutex_);
-  planner_manager_.removeScenePlugin(*this, request->plugin_name);
+  planner_manager_.removeScenePlugin(*this, request->data);
 }
 
 void BehaviorVelocityPlannerNode::onParam()
@@ -159,21 +134,6 @@ void BehaviorVelocityPlannerNode::onParam()
   planner_data_.velocity_smoother_ =
     std::make_unique<autoware::velocity_smoother::AnalyticalJerkConstrainedSmoother>(*this);
   planner_data_.velocity_smoother_->setWheelBase(planner_data_.vehicle_info_.wheel_base_m);
-}
-
-void BehaviorVelocityPlannerNode::onLaneletMap(
-  const autoware_map_msgs::msg::LaneletMapBin::ConstSharedPtr msg)
-{
-  std::lock_guard<std::mutex> lock(mutex_);
-
-  map_ptr_ = msg;
-  has_received_map_ = true;
-}
-
-void BehaviorVelocityPlannerNode::onExternalVelocityLimit(const VelocityLimit::ConstSharedPtr msg)
-{
-  std::lock_guard<std::mutex> lock(mutex_);
-  planner_data_.external_velocity_limit = *msg;
 }
 
 void BehaviorVelocityPlannerNode::processNoGroundPointCloud(
@@ -194,7 +154,7 @@ void BehaviorVelocityPlannerNode::processNoGroundPointCloud(
   Eigen::Affine3f affine = tf2::transformToEigen(transform.transform).cast<float>();
   pcl::PointCloud<pcl::PointXYZ>::Ptr pc_transformed(new pcl::PointCloud<pcl::PointXYZ>);
   if (!pc.empty()) {
-    autoware::universe_utils::transformPointCloud(pc, *pc_transformed, affine);
+    autoware_utils::transform_pointcloud(pc, *pc_transformed, affine);
   }
 
   planner_data_.no_ground_pointcloud = pc_transformed;
@@ -272,11 +232,11 @@ bool BehaviorVelocityPlannerNode::processData(rclcpp::Clock clock)
   bool is_ready = true;
   const auto & logData = [&clock, this](const std::string & data_type) {
     std::string msg = "Waiting for " + data_type + " data";
-    RCLCPP_INFO_THROTTLE(get_logger(), clock, logger_throttle_interval, msg.c_str());
+    RCLCPP_INFO_THROTTLE(get_logger(), clock, logger_throttle_interval, "%s", msg.c_str());
   };
 
   const auto & getData = [&logData](auto & dest, auto & sub, const std::string & data_type = "") {
-    const auto temp = sub.takeData();
+    const auto temp = sub.take_data();
     if (temp) {
       dest = temp;
       return true;
@@ -289,7 +249,7 @@ bool BehaviorVelocityPlannerNode::processData(rclcpp::Clock clock)
   is_ready &= getData(planner_data_.predicted_objects, sub_predicted_objects_, "predicted_objects");
   is_ready &= getData(planner_data_.occupancy_grid, sub_occupancy_grid_, "occupancy_grid");
 
-  const auto odometry = sub_vehicle_odometry_.takeData();
+  const auto odometry = sub_vehicle_odometry_.take_data();
   if (odometry) {
     processOdometry(odometry);
   } else {
@@ -297,7 +257,7 @@ bool BehaviorVelocityPlannerNode::processData(rclcpp::Clock clock)
     is_ready = false;
   }
 
-  const auto no_ground_pointcloud = sub_no_ground_pointcloud_.takeData();
+  const auto no_ground_pointcloud = sub_no_ground_pointcloud_.take_data();
   if (no_ground_pointcloud) {
     processNoGroundPointCloud(no_ground_pointcloud);
   } else {
@@ -305,10 +265,18 @@ bool BehaviorVelocityPlannerNode::processData(rclcpp::Clock clock)
     is_ready = false;
   }
 
-  // optional data
-  getData(planner_data_.virtual_traffic_light_states, sub_virtual_traffic_light_states_);
+  const auto map_data = sub_lanelet_map_.take_data();
+  if (map_data) {
+    planner_data_.route_handler_ = std::make_shared<route_handler::RouteHandler>(*map_data);
+  }
 
-  const auto traffic_signals = sub_traffic_signals_.takeData();
+  // planner_data_.external_velocity_limit is std::optional type variable.
+  const auto external_velocity_limit = sub_external_velocity_limit_.take_data();
+  if (external_velocity_limit) {
+    planner_data_.external_velocity_limit = *external_velocity_limit;
+  }
+
+  const auto traffic_signals = sub_traffic_signals_.take_data();
   if (traffic_signals) processTrafficSignals(traffic_signals);
 
   return is_ready;
@@ -324,17 +292,11 @@ bool BehaviorVelocityPlannerNode::isDataReady(rclcpp::Clock clock)
     return false;
   }
 
-  if (!map_ptr_) {
-    RCLCPP_INFO_THROTTLE(
-      get_logger(), clock, logger_throttle_interval, "Waiting for lanelet_map data");
-    return false;
-  }
-
   return processData(clock);
 }
 
 void BehaviorVelocityPlannerNode::onTrigger(
-  const tier4_planning_msgs::msg::PathWithLaneId::ConstSharedPtr input_path_msg)
+  const autoware_internal_planning_msgs::msg::PathWithLaneId::ConstSharedPtr input_path_msg)
 {
   std::unique_lock<std::mutex> lk(mutex_);
 
@@ -343,10 +305,6 @@ void BehaviorVelocityPlannerNode::onTrigger(
   }
 
   // Load map and check route handler
-  if (has_received_map_) {
-    planner_data_.route_handler_ = std::make_shared<route_handler::RouteHandler>(*map_ptr_);
-    has_received_map_ = false;
-  }
   if (!planner_data_.route_handler_) {
     RCLCPP_INFO_THROTTLE(
       get_logger(), *get_clock(), logger_throttle_interval,
@@ -365,7 +323,6 @@ void BehaviorVelocityPlannerNode::onTrigger(
 
   path_pub_->publish(output_path_msg);
   published_time_publisher_->publish_if_subscribed(path_pub_, output_path_msg.header.stamp);
-  stop_reason_diag_pub_->publish(planner_manager_.getStopReasonDiag());
 
   if (debug_viz_pub_->get_subscription_count() > 0) {
     publishDebugMarker(output_path_msg);
@@ -373,7 +330,7 @@ void BehaviorVelocityPlannerNode::onTrigger(
 }
 
 autoware_planning_msgs::msg::Path BehaviorVelocityPlannerNode::generatePath(
-  const tier4_planning_msgs::msg::PathWithLaneId::ConstSharedPtr input_path_msg,
+  const autoware_internal_planning_msgs::msg::PathWithLaneId::ConstSharedPtr input_path_msg,
   const PlannerData & planner_data)
 {
   autoware_planning_msgs::msg::Path output_path_msg;
@@ -387,7 +344,7 @@ autoware_planning_msgs::msg::Path BehaviorVelocityPlannerNode::generatePath(
       "Backward path is NOT supported. just converting path_with_lane_id to path");
     output_path_msg = to_path(*input_path_msg);
     output_path_msg.header.frame_id = "map";
-    output_path_msg.header.stamp = this->now();
+    output_path_msg.header.stamp = input_path_msg->header.stamp;
     output_path_msg.left_bound = input_path_msg->left_bound;
     output_path_msg.right_bound = input_path_msg->right_bound;
     return output_path_msg;
@@ -409,7 +366,7 @@ autoware_planning_msgs::msg::Path BehaviorVelocityPlannerNode::generatePath(
   output_path_msg = autoware::behavior_velocity_planner::filterStopPathPoint(interpolated_path_msg);
 
   output_path_msg.header.frame_id = "map";
-  output_path_msg.header.stamp = this->now();
+  output_path_msg.header.stamp = input_path_msg->header.stamp;
 
   // TODO(someone): This must be updated in each scene module, but copy from input message for now.
   output_path_msg.left_bound = input_path_msg->left_bound;

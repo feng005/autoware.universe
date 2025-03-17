@@ -21,12 +21,13 @@
 #include <algorithm>
 #include <chrono>
 #include <limits>
+#include <memory>
 #include <vector>
 
 namespace autoware::velocity_smoother
 {
 L2PseudoJerkSmoother::L2PseudoJerkSmoother(
-  rclcpp::Node & node, const std::shared_ptr<autoware::universe_utils::TimeKeeper> time_keeper)
+  rclcpp::Node & node, const std::shared_ptr<autoware_utils::TimeKeeper> time_keeper)
 : SmootherBase(node, time_keeper)
 {
   auto & p = smoother_param_;

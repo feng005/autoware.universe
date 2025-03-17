@@ -11,7 +11,7 @@ This is necessary information especially when you want to convert from global (g
 
 ## Map projector info file specification
 
-You need to provide a YAML file, namely `map_projector_info.yaml` under the `map_path` directory. For `pointcloud_map_metadata.yaml`, please refer to the Readme of `map_loader`.
+You need to provide a YAML file, namely `map_projector_info.yaml` under the `map_path` directory. For `pointcloud_map_metadata.yaml`, please refer to the Readme of `autoware_map_loader`.
 
 ```bash
 sample-map-rosbag
@@ -29,7 +29,7 @@ There are three types of transformations from latitude and longitude to XYZ coor
 
 ```yaml
 # map_projector_info.yaml
-projector_type: local
+projector_type: Local
 ```
 
 #### Limitation
@@ -70,6 +70,22 @@ map_origin:
   altitude: 0.0 # [m]
 ```
 
+### Using LocalCartesian
+
+If you want to use local cartesian WGS84, please specify the map origin as well.
+
+Currently LocalCartesian can only be used in lanelet2_map_loader, packages like gnss_poser doesn't support it right now.
+
+```yaml
+# map_projector_info.yaml
+projector_type: LocalCartesian
+vertical_datum: WGS84
+map_origin:
+  latitude: 35.6762 # [deg]
+  longitude: 139.6503 # [deg]
+  altitude: 0.0 # [m]
+```
+
 ### Using TransverseMercator
 
 If you want to use Transverse Mercator projection, please specify the map origin as well.
@@ -86,7 +102,7 @@ map_origin:
 
 ## Published Topics
 
-- `~/map_projector_info` (tier4_map_msgs/MapProjectorInfo) : This topic shows the definition of map projector information
+- `~/map_projector_info` (autoware_map_msgs/MapProjectorInfo) : This topic shows the definition of map projector information
 
 ## Parameters
 

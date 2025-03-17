@@ -6,11 +6,6 @@
     "autoware_planning_evaluator": {
       "type": "object",
       "properties": {
-        "output_file": {
-          "description": "output metrics file path",
-          "type": "string",
-          "default": ""
-        },
         "ego_frame": {
           "description": "reference frame of ego",
           "type": "string",
@@ -26,6 +21,7 @@
             "curvature",
             "point_interval",
             "relative_angle",
+            "resampled_relative_angle",
             "length",
             "duration",
             "velocity",
@@ -34,6 +30,7 @@
             "lateral_deviation",
             "yaw_deviation",
             "velocity_deviation",
+            "lateral_trajectory_displacement",
             "stability",
             "stability_frechet",
             "obstacle_distance",

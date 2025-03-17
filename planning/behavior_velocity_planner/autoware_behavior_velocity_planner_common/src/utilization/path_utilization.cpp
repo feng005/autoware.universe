@@ -15,19 +15,17 @@
 #include <autoware/behavior_velocity_planner_common/utilization/path_utilization.hpp>
 #include <autoware/motion_utils/resample/resample.hpp>
 #include <autoware/motion_utils/trajectory/trajectory.hpp>
+#include <autoware_utils/geometry/geometry.hpp>
 #include <rclcpp/rclcpp.hpp>
 
 #include <algorithm>
-#include <memory>
 #include <vector>
-
-constexpr double DOUBLE_EPSILON = 1e-6;
 
 namespace autoware::behavior_velocity_planner
 {
 bool splineInterpolate(
-  const tier4_planning_msgs::msg::PathWithLaneId & input, const double interval,
-  tier4_planning_msgs::msg::PathWithLaneId & output, const rclcpp::Logger logger)
+  const autoware_internal_planning_msgs::msg::PathWithLaneId & input, const double interval,
+  autoware_internal_planning_msgs::msg::PathWithLaneId & output, const rclcpp::Logger & logger)
 {
   if (input.points.size() < 2) {
     RCLCPP_DEBUG(logger, "Do not interpolate because path size is 1.");
@@ -79,7 +77,7 @@ autoware_planning_msgs::msg::Path interpolatePath(
       v.push_back(path_point.longitudinal_velocity_mps);
       if (idx != 0) {
         const auto path_point_prev = path.points.at(idx - 1);
-        s += autoware::universe_utils::calcDistance2d(path_point_prev.pose, path_point.pose);
+        s += autoware_utils::calc_distance2d(path_point_prev.pose, path_point.pose);
       }
       if (s > path_len) {
         break;
@@ -158,12 +156,12 @@ autoware_planning_msgs::msg::Path filterStopPathPoint(
 {
   autoware_planning_msgs::msg::Path filtered_path = path;
   bool found_stop = false;
-  for (size_t i = 0; i < filtered_path.points.size(); ++i) {
-    if (std::fabs(filtered_path.points.at(i).longitudinal_velocity_mps) < 0.01) {
+  for (auto & point : filtered_path.points) {
+    if (std::fabs(point.longitudinal_velocity_mps) < 0.01) {
       found_stop = true;
     }
     if (found_stop) {
-      filtered_path.points.at(i).longitudinal_velocity_mps = 0.0;
+      point.longitudinal_velocity_mps = 0.0;
     }
   }
   return filtered_path;

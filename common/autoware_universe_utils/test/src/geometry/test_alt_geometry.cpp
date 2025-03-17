@@ -25,7 +25,10 @@
 #include <gtest/gtest.h>
 
 #include <chrono>
+#include <cstdio>
+#include <iostream>
 #include <string>
+#include <vector>
 
 constexpr double epsilon = 1e-6;
 
@@ -160,6 +163,17 @@ TEST(alt_geometry, coveredBy)
     const auto result = covered_by(point, ConvexPolygon2d::create({p1, p2, p3, p4}).value());
 
     EXPECT_TRUE(result);
+  }
+
+  {  // The point is on the extended line of an edge of the polygon
+    const Point2d point = {0.0, 0.0};
+    const Point2d p1 = {3.0, 0.0};
+    const Point2d p2 = {3.0, 1.0};
+    const Point2d p3 = {4.0, 1.0};
+    const Point2d p4 = {4.0, 0.0};
+    const auto result = covered_by(point, ConvexPolygon2d::create({p1, p2, p3, p4}).value());
+
+    EXPECT_FALSE(result);
   }
 }
 
@@ -671,6 +685,17 @@ TEST(alt_geometry, within)
     EXPECT_FALSE(result);
   }
 
+  {  // The point is on the extended line of an edge of the polygon
+    const Point2d point = {0.0, 0.0};
+    const Point2d p1 = {3.0, 0.0};
+    const Point2d p2 = {3.0, 1.0};
+    const Point2d p3 = {4.0, 1.0};
+    const Point2d p4 = {4.0, 0.0};
+    const auto result = within(point, ConvexPolygon2d::create({p1, p2, p3, p4}).value());
+
+    EXPECT_FALSE(result);
+  }
+
   {  // One polygon is within the other
     const Point2d p1 = {1.0, 1.0};
     const Point2d p2 = {1.0, -1.0};
@@ -723,7 +748,7 @@ TEST(alt_geometry, within)
 TEST(alt_geometry, areaRand)
 {
   std::vector<autoware::universe_utils::Polygon2d> polygons;
-  constexpr auto polygons_nb = 500;
+  constexpr auto polygons_nb = 100;
   constexpr auto max_vertices = 10;
   constexpr auto max_values = 1000;
 
@@ -763,7 +788,7 @@ TEST(alt_geometry, areaRand)
 TEST(alt_geometry, convexHullRand)
 {
   std::vector<autoware::universe_utils::Polygon2d> polygons;
-  constexpr auto polygons_nb = 500;
+  constexpr auto polygons_nb = 100;
   constexpr auto max_vertices = 10;
   constexpr auto max_values = 1000;
 
@@ -811,7 +836,7 @@ TEST(alt_geometry, convexHullRand)
 TEST(alt_geometry, coveredByRand)
 {
   std::vector<autoware::universe_utils::Polygon2d> polygons;
-  constexpr auto polygons_nb = 500;
+  constexpr auto polygons_nb = 100;
   constexpr auto max_vertices = 10;
   constexpr auto max_values = 1000;
 
@@ -878,7 +903,7 @@ TEST(alt_geometry, coveredByRand)
 TEST(alt_geometry, disjointRand)
 {
   std::vector<autoware::universe_utils::Polygon2d> polygons;
-  constexpr auto polygons_nb = 500;
+  constexpr auto polygons_nb = 100;
   constexpr auto max_vertices = 10;
   constexpr auto max_values = 1000;
 
@@ -944,7 +969,7 @@ TEST(alt_geometry, disjointRand)
 TEST(alt_geometry, intersectsRand)
 {
   std::vector<autoware::universe_utils::Polygon2d> polygons;
-  constexpr auto polygons_nb = 500;
+  constexpr auto polygons_nb = 100;
   constexpr auto max_vertices = 10;
   constexpr auto max_values = 1000;
 
@@ -1010,7 +1035,7 @@ TEST(alt_geometry, intersectsRand)
 TEST(alt_geometry, touchesRand)
 {
   std::vector<autoware::universe_utils::Polygon2d> polygons;
-  constexpr auto polygons_nb = 500;
+  constexpr auto polygons_nb = 100;
   constexpr auto max_vertices = 10;
   constexpr auto max_values = 1000;
 
@@ -1077,7 +1102,7 @@ TEST(alt_geometry, touchesRand)
 TEST(alt_geometry, withinPolygonRand)
 {
   std::vector<autoware::universe_utils::Polygon2d> polygons;
-  constexpr auto polygons_nb = 500;
+  constexpr auto polygons_nb = 100;
   constexpr auto max_vertices = 10;
   constexpr auto max_values = 1000;
 

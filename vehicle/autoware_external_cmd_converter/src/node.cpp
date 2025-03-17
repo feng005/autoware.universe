@@ -15,6 +15,8 @@
 #include "autoware_external_cmd_converter/node.hpp"
 
 #include <algorithm>
+#include <cmath>
+#include <iostream>
 #include <memory>
 #include <string>
 #include <utility>
@@ -98,8 +100,8 @@ void ExternalCmdConverterNode::on_external_cmd(const ExternalControlCommand::Con
   latest_cmd_received_time_ = std::make_shared<rclcpp::Time>(this->now());
 
   // take data from subscribers
-  current_velocity_ptr_ = velocity_sub_.takeData();
-  current_shift_cmd_ = shift_cmd_sub_.takeData();
+  current_velocity_ptr_ = velocity_sub_.take_data();
+  current_shift_cmd_ = shift_cmd_sub_.take_data();
 
   // Wait for input data
   if (!current_velocity_ptr_ || !acc_map_initialized_ || !current_shift_cmd_) {
@@ -147,6 +149,14 @@ double ExternalCmdConverterNode::calculate_acc(const ExternalControlCommand & cm
 {
   const double desired_throttle = cmd.control.throttle;
   const double desired_brake = cmd.control.brake;
+  if (
+    std::isnan(desired_throttle) || std::isnan(desired_brake) || std::isinf(desired_throttle) ||
+    std::isinf(desired_brake)) {
+    std::cerr << "Input brake or throttle is out of range. returning 0.0 acceleration."
+              << std::endl;
+    return 0.0;
+  }
+
   const double desired_pedal = desired_throttle - desired_brake;
 
   double ref_acceleration = 0.0;
@@ -180,7 +190,7 @@ void ExternalCmdConverterNode::check_topic_status(
   using diagnostic_msgs::msg::DiagnosticStatus;
   DiagnosticStatus status;
 
-  current_gate_mode_ = gate_mode_sub_.takeData();
+  current_gate_mode_ = gate_mode_sub_.take_data();
 
   if (!check_emergency_stop_topic_timeout()) {
     status.level = DiagnosticStatus::ERROR;

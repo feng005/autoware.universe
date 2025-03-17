@@ -16,9 +16,9 @@
 
 #include "autoware/tracking_object_merger/decorative_tracker_merger_node.hpp"
 
+#include "autoware/object_recognition_utils/object_recognition_utils.hpp"
 #include "autoware/tracking_object_merger/association/solver/ssp.hpp"
 #include "autoware/tracking_object_merger/utils/utils.hpp"
-#include "object_recognition_utils/object_recognition_utils.hpp"
 
 #include <Eigen/Core>
 #include <Eigen/Geometry>
@@ -28,7 +28,10 @@
 #include <glog/logging.h>
 
 #include <chrono>
+#include <memory>
+#include <string>
 #include <unordered_map>
+#include <vector>
 
 using Label = autoware_perception_msgs::msg::ObjectClassification;
 
@@ -57,7 +60,8 @@ Eigen::MatrixXd calcScoreMatrixForAssociation(
   const rclcpp::Time current_time = rclcpp::Time(objects0.header.stamp);
 
   // calc score matrix
-  Eigen::MatrixXd score_matrix = Eigen::MatrixXd::Zero(trackers.size(), objects0.objects.size());
+  Eigen::MatrixXd score_matrix = Eigen::MatrixXd::Zero(
+    static_cast<Eigen::Index>(trackers.size()), static_cast<Eigen::Index>(objects0.objects.size()));
   for (size_t trackers_idx = 0; trackers_idx < trackers.size(); ++trackers_idx) {
     const auto & tracker_obj = trackers.at(trackers_idx);
     const auto & object1 = tracker_obj.getObject();
@@ -77,7 +81,8 @@ Eigen::MatrixXd calcScoreMatrixForAssociation(
       } else {
         score = data_association_map.at("lidar-radar")->calcScoreBetweenObjects(object0, object1);
       }
-      score_matrix(trackers_idx, objects0_idx) = score;
+      score_matrix(
+        static_cast<Eigen::Index>(trackers_idx), static_cast<Eigen::Index>(objects0_idx)) = score;
     }
   }
   return score_matrix;
@@ -157,14 +162,12 @@ DecorativeTrackerMergerNode::DecorativeTrackerMergerNode(const rclcpp::NodeOptio
   set3dDataAssociation("radar-radar", data_association_map_);
 
   // debug publisher
-  processing_time_publisher_ = std::make_unique<autoware::universe_utils::DebugPublisher>(
-    this, "decorative_object_merger_node");
-  stop_watch_ptr_ =
-    std::make_unique<autoware::universe_utils::StopWatch<std::chrono::milliseconds>>();
+  processing_time_publisher_ =
+    std::make_unique<autoware_utils::DebugPublisher>(this, "decorative_object_merger_node");
+  stop_watch_ptr_ = std::make_unique<autoware_utils::StopWatch<std::chrono::milliseconds>>();
   stop_watch_ptr_->tic("cyclic_time");
   stop_watch_ptr_->tic("processing_time");
-  published_time_publisher_ =
-    std::make_unique<autoware::universe_utils::PublishedTimePublisher>(this);
+  published_time_publisher_ = std::make_unique<autoware_utils::PublishedTimePublisher>(this);
 }
 
 void DecorativeTrackerMergerNode::set3dDataAssociation(
@@ -200,7 +203,7 @@ void DecorativeTrackerMergerNode::mainObjectsCallback(
 
   /* transform to target merge coordinate */
   TrackedObjects transformed_objects;
-  if (!object_recognition_utils::transformObjects(
+  if (!autoware::object_recognition_utils::transformObjects(
         *main_objects, merge_frame_id_, tf_buffer_, transformed_objects)) {
     return;
   }
@@ -242,9 +245,9 @@ void DecorativeTrackerMergerNode::mainObjectsCallback(
 
   published_time_publisher_->publish_if_subscribed(
     merged_object_pub_, tracked_objects.header.stamp);
-  processing_time_publisher_->publish<tier4_debug_msgs::msg::Float64Stamped>(
+  processing_time_publisher_->publish<autoware_internal_debug_msgs::msg::Float64Stamped>(
     "debug/cyclic_time_ms", stop_watch_ptr_->toc("cyclic_time", true));
-  processing_time_publisher_->publish<tier4_debug_msgs::msg::Float64Stamped>(
+  processing_time_publisher_->publish<autoware_internal_debug_msgs::msg::Float64Stamped>(
     "debug/processing_time_ms", stop_watch_ptr_->toc("processing_time", true));
 }
 
@@ -258,7 +261,7 @@ void DecorativeTrackerMergerNode::subObjectsCallback(const TrackedObjects::Const
 {
   /* transform to target merge coordinate */
   TrackedObjects transformed_objects;
-  if (!object_recognition_utils::transformObjects(
+  if (!autoware::object_recognition_utils::transformObjects(
         *msg, merge_frame_id_, tf_buffer_, transformed_objects)) {
     return;
   }
@@ -316,9 +319,11 @@ bool DecorativeTrackerMergerNode::decorativeMerger(
   // look for tracker
   for (int tracker_idx = 0; tracker_idx < static_cast<int>(inner_tracker_objects_.size());
        ++tracker_idx) {
-    auto & object0_state = inner_tracker_objects_.at(tracker_idx);
+    auto & object0_state =
+      inner_tracker_objects_.at(static_cast<std::vector<int>::size_type>(tracker_idx));
     if (direct_assignment.find(tracker_idx) != direct_assignment.end()) {  // found and merge
-      const auto & object1 = objects1.at(direct_assignment.at(tracker_idx));
+      const auto & object1 =
+        objects1.at(static_cast<std::vector<int>::size_type>(direct_assignment.at(tracker_idx)));
       // merge object1 into object0_state
       object0_state.updateState(input_sensor, current_time, object1);
     } else {  // not found
@@ -328,7 +333,7 @@ bool DecorativeTrackerMergerNode::decorativeMerger(
   }
   // look for new object
   for (int object1_idx = 0; object1_idx < static_cast<int>(objects1.size()); ++object1_idx) {
-    const auto & object1 = objects1.at(object1_idx);
+    const auto & object1 = objects1.at(static_cast<std::vector<int>::size_type>(object1_idx));
     if (reverse_assignment.find(object1_idx) != reverse_assignment.end()) {  // found
     } else {                                                                 // not found
       inner_tracker_objects_.push_back(createNewTracker(input_sensor, current_time, object1));

@@ -15,14 +15,13 @@
 #ifndef MANAGER_HPP_
 #define MANAGER_HPP_
 
+#include "autoware/behavior_velocity_planner_common/plugin_wrapper.hpp"
+#include "autoware/behavior_velocity_planner_common/scene_module_interface.hpp"
 #include "scene.hpp"
 
-#include <autoware/behavior_velocity_planner_common/plugin_interface.hpp>
-#include <autoware/behavior_velocity_planner_common/plugin_wrapper.hpp>
-#include <autoware/behavior_velocity_planner_common/scene_module_interface.hpp>
 #include <rclcpp/rclcpp.hpp>
 
-#include <tier4_planning_msgs/msg/path_with_lane_id.hpp>
+#include <autoware_internal_planning_msgs/msg/path_with_lane_id.hpp>
 
 #include <functional>
 #include <memory>
@@ -34,7 +33,7 @@ namespace autoware::behavior_velocity_planner
 {
 using StopLineWithLaneId = std::pair<lanelet::ConstLineString3d, int64_t>;
 
-class StopLineModuleManager : public SceneModuleManagerInterface
+class StopLineModuleManager : public SceneModuleManagerInterface<>
 {
 public:
   explicit StopLineModuleManager(rclcpp::Node & node);
@@ -45,17 +44,17 @@ private:
   StopLineModule::PlannerParam planner_param_;
 
   std::vector<StopLineWithLaneId> getStopLinesWithLaneIdOnPath(
-    const tier4_planning_msgs::msg::PathWithLaneId & path,
+    const autoware_internal_planning_msgs::msg::PathWithLaneId & path,
     const lanelet::LaneletMapPtr lanelet_map);
 
   std::set<int64_t> getStopLineIdSetOnPath(
-    const tier4_planning_msgs::msg::PathWithLaneId & path,
+    const autoware_internal_planning_msgs::msg::PathWithLaneId & path,
     const lanelet::LaneletMapPtr lanelet_map);
 
-  void launchNewModules(const tier4_planning_msgs::msg::PathWithLaneId & path) override;
+  void launchNewModules(const autoware_internal_planning_msgs::msg::PathWithLaneId & path) override;
 
   std::function<bool(const std::shared_ptr<SceneModuleInterface> &)> getModuleExpiredFunction(
-    const tier4_planning_msgs::msg::PathWithLaneId & path) override;
+    const autoware_internal_planning_msgs::msg::PathWithLaneId & path) override;
 };
 
 class StopLineModulePlugin : public PluginWrapper<StopLineModuleManager>
